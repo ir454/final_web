@@ -1,0 +1,50 @@
+const totalCircles = 8;
+const circles = [];
+const circleSegments = [];
+const circleAudio = [];
+
+const rows = 2;
+const cols = 4;
+const spacingX = floorSize / (cols + 1);
+const spacingZ = floorSize / (rows + 1);
+
+for(let i = 0; i < totalCircles; i++){
+  const geometry = new THREE.SphereGeometry(1, 32, 32);
+  const material = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x000000 });
+  const mesh = new THREE.Mesh(geometry, material);
+
+  // Compute grid position
+  const row = Math.floor(i / cols);
+  const col = i % cols;
+
+  const x = -floorSize/2 + spacingX * (col + 1);
+  const z = -floorSize/2 + spacingZ * (row + 1);
+  mesh.position.set(x, 1, z);
+
+  scene.add(mesh);
+
+  // Circle data
+  circles.push({
+    mesh,
+    baseY: 1,
+    currentColor: new THREE.Color(Math.random(), Math.random(), Math.random()),
+    targetColor: new THREE.Color(Math.random(), Math.random(), Math.random())
+  });
+
+  // Segments
+  const segs = [];
+  const segmentCount = 16;
+  for(let j = 0; j < segmentCount; j++){
+    const segGeom = new THREE.BufferGeometry();
+    const positions = new Float32Array(6);
+    segGeom.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    const segMat = new THREE.LineBasicMaterial({ color: 0xffffff });
+    const line = new THREE.Line(segGeom, segMat);
+    scene.add(line);
+    segs.push({ geom: segGeom, line, index: j });
+  }
+  circleSegments.push(segs);
+
+  // Audio placeholder
+  circleAudio.push({ currentFreq: 440, currentVolume: 0 });
+}
