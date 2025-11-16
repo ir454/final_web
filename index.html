@@ -1,7 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>3D Audio Visual Experience</title>
+<style>
+  body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; }
+  canvas { display: block; }
+  #uiContainer {
+    position: absolute;
+    top: 10px; left: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    background: rgba(0,0,0,0.4);
+    padding: 10px;
+    border-radius: 8px;
+  }
+  #timer { font-size: 28px; color: white; font-weight: bold; text-align: center; }
+  #startAudio {
+    padding: 8px 16px;
+    background: #ff4444;
+    color: white;
+    font-size: 16px;
+    border: none;
+    cursor: pointer;
+    border-radius: 6px;
+  }
+  #miniMap {
+    width: 150px;
+    height: 150px;
+    background: #111;
+    border: 2px solid white;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  #controls {
+    color: white;
+    font-size: 14px;
+    background: rgba(0,0,0,0.45);
+    padding: 8px;
+    border-radius: 6px;
+    line-height: 1.3em;
+  }
+  #controls ul { margin: 6px 0 0 16px; padding: 0; list-style-type: disc; }
+  #controls li { margin-bottom: 3px; }
+</style>
+</head>
+<body>
+<div id="uiContainer">
+  <div id="timer">05:00</div>
+  <canvas id="miniMap"></canvas>
+  <button id="startAudio">Click to Enable Sound</button>
+  <div id="controls">
+    <strong>Controls:</strong>
+    <ul>
+      <li>Move: W A S D</li>
+      <li>Look: Arrow Keys</li>
+      <li>Move Circle to You: 1–8</li>
+      <li>Mini-Map: Click a circle, then drag to move it</li>
+    </ul>
+  </div>
+</div>
+
+<script type="module">
+import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
+
+/* ======================== SCENE ======================== */
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x000000);
+
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 200);
+camera.position.set(0,1.5,15);
+
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+/* ======================== FLOOR ======================== */
+const floorSize = 60;
+const floorGeometry = new THREE.PlaneGeometry(floorSize,floorSize,60,60);
+const floorMaterial = new THREE.MeshBasicMaterial({color:0xffffff, wireframe:true, transparent:true, opacity:0.5});
+const floorMesh = new THREE.Mesh(floorGeometry,floorMaterial);
+floorMesh.rotation.x = -Math.PI/2;
+scene.add(floorMesh);
+
+/* ======================== LIGHT ======================== */
+const light = new THREE.DirectionalLight(0xffffff,1);
+light.position.set(5,10,7);
+scene.add(light);
+
+/* ======================== CIRCLES ======================== */
 const totalCircles = 8;
 const circles = [];
 const circleSegments = [];
-const circleAudio = [];
+const neonColors = [0xff00ff,0x00ffff,0xffff00,0xff5500, 0x00ff00, 0xff8800, 0x8888ff, 0xff0088];
 
 const rows = 2;
 const cols = 4;
@@ -9,42 +101,360 @@ const spacingX = floorSize / (cols + 1);
 const spacingZ = floorSize / (rows + 1);
 
 for(let i = 0; i < totalCircles; i++){
-  const geometry = new THREE.SphereGeometry(1, 32, 32);
-  const material = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x000000 });
-  const mesh = new THREE.Mesh(geometry, material);
+  const mat = new THREE.MeshStandardMaterial({
+    color: neonColors[i],
+    emissive: neonColors[i],
+    emissiveIntensity: 0.6
+  });
+  const circle = new THREE.Mesh(new THREE.SphereGeometry(1,16,16), mat);
 
-  // Compute grid position
   const row = Math.floor(i / cols);
   const col = i % cols;
 
   const x = -floorSize/2 + spacingX * (col + 1);
   const z = -floorSize/2 + spacingZ * (row + 1);
-  mesh.position.set(x, 1, z);
+  circle.position.set(x, 1, z);
 
-  scene.add(mesh);
+  scene.add(circle);
+  circles.push({mesh: circle, currentColor: new THREE.Color(neonColors[i]), targetColor: new THREE.Color(neonColors[i]), baseY: circle.position.y});
+}
 
-  // Circle data
-  circles.push({
-    mesh,
-    baseY: 1,
-    currentColor: new THREE.Color(Math.random(), Math.random(), Math.random()),
-    targetColor: new THREE.Color(Math.random(), Math.random(), Math.random())
-  });
-
-  // Segments
+/* ======================== SEGMENTS ======================== */
+const segmentsPerCircle = 15;
+for(let i=0;i<totalCircles;i++){
   const segs = [];
-  const segmentCount = 16;
-  for(let j = 0; j < segmentCount; j++){
-    const segGeom = new THREE.BufferGeometry();
-    const positions = new Float32Array(6);
-    segGeom.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-    const segMat = new THREE.LineBasicMaterial({ color: 0xffffff });
-    const line = new THREE.Line(segGeom, segMat);
+  for(let j=0;j<segmentsPerCircle;j++){
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6),3));
+    const line = new THREE.Line(geom,new THREE.LineBasicMaterial({color: neonColors[i]}));
     scene.add(line);
-    segs.push({ geom: segGeom, line, index: j });
+    segs.push({line, geom});
   }
   circleSegments.push(segs);
-
-  // Audio placeholder
-  circleAudio.push({ currentFreq: 440, currentVolume: 0 });
 }
+
+/* ======================== USER MOVEMENT ======================== */
+const keys = {};
+document.addEventListener("keydown", e => keys[e.key] = true);
+document.addEventListener("keyup", e => delete keys[e.key]);
+
+let yaw = 0, pitch = 0;
+
+function updateMovement(){
+  const moveSpeed = 0.13, rotSpeed = 0.02;
+
+  if(keys["ArrowLeft"]) yaw += rotSpeed;
+  if(keys["ArrowRight"]) yaw -= rotSpeed;
+  if(keys["ArrowUp"]) pitch += rotSpeed;
+  if(keys["ArrowDown"]) pitch -= rotSpeed;
+
+  camera.rotation.set(pitch, yaw, 0);
+
+  const forward = new THREE.Vector3(-Math.sin(yaw),0,-Math.cos(yaw));
+  const right = new THREE.Vector3(Math.cos(yaw),0,-Math.sin(yaw));
+
+  if(keys["w"]||keys["W"]) camera.position.addScaledVector(forward, moveSpeed);
+  if(keys["s"]||keys["S"]) camera.position.addScaledVector(forward, -moveSpeed);
+  if(keys["a"]||keys["A"]) camera.position.addScaledVector(right, -moveSpeed);
+  if(keys["d"]||keys["D"]) camera.position.addScaledVector(right, moveSpeed);
+
+  // Move circles to player
+  ["1","2","3","4","5","6","7","8"].forEach((k,i)=>{
+    if(keys[k]){
+      circles[i].mesh.position.copy(camera.position);
+      circles[i].mesh.position.y = 1;
+      delete keys[k];
+    }
+  });
+}
+
+/* ======================== AUDIO ======================== */
+let audioCtx, audioStarted=false;
+const circleAudioArray = [];
+const baseMelody = [261.63,311.13,349.23,392.00,466.16].map(n=>n*0.5);
+const melody=[];
+for(let o=0;o<3;o++){baseMelody.forEach(n=>melody.push(n*Math.pow(2,o)))}
+
+function createImpulseResponse(ctx,duration=1.0,decay=1.0){
+  const rate = ctx.sampleRate;
+  const length = rate * duration;
+  const impulse = ctx.createBuffer(2,length,rate);
+  for(let ch=0;ch<2;ch++){
+    const data = impulse.getChannelData(ch);
+    for(let i=0;i<length;i++){data[i]=Math.random()*Math.pow((length-i)/length,decay);}
+  }
+  return impulse;
+}
+
+function startAudio(){
+  audioCtx = new AudioContext();
+  const reverb = createImpulseResponse(audioCtx);
+
+  for(let i=0;i<totalCircles;i++){
+    const osc = audioCtx.createOscillator();
+    osc.type = "triangle";
+
+    const panner = audioCtx.createPanner();
+    panner.panningModel = "HRTF";
+
+    const lowpass = audioCtx.createBiquadFilter();
+    lowpass.type = "lowpass";
+
+    const gain = audioCtx.createGain();
+    gain.gain.value = 0;
+
+    const convolver = audioCtx.createConvolver();
+    convolver.buffer = reverb;
+    const reverbGain = audioCtx.createGain();
+    reverbGain.gain.value = 0.1;
+
+    osc.connect(panner);
+    panner.connect(lowpass);
+    lowpass.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    osc.connect(convolver);
+    convolver.connect(reverbGain);
+    reverbGain.connect(audioCtx.destination);
+
+    osc.start();
+
+    circleAudioArray.push({osc, gain, panner, lowpass, nextNoteTime: audioCtx.currentTime + Math.random()*1.5, noteDuration:0.2+Math.random()*0.2, currentFreq:0, currentVolume:0, lastNoteColor:new THREE.Color(neonColors[i]), pointillistic:false});
+  }
+
+  audioStarted = true;
+  document.getElementById("startAudio").style.display = "none";
+  startTimer();
+}
+
+/* ======================== TIMER ======================== */
+let timerSeconds = 300;
+let timerInterval = null;
+let drumStarted=false, pointillisticStarted=false;
+
+function startTimer(){
+  timerInterval = setInterval(()=>{
+    timerSeconds--;
+
+    if(timerSeconds<=240 && !drumStarted){startDrumMachine(); drumStarted=true;}
+    if(timerSeconds<=120 && drumStarted){stopDrumMachine(); drumStarted=false;}
+    if(timerSeconds<=60 && !pointillisticStarted){
+      circleAudioArray.forEach(c=>c.pointillistic=true);
+      pointillisticStarted=true;
+    }
+
+    if(timerSeconds<=10 && timerSeconds>0){
+      const fade = timerSeconds/10;
+      circleAudioArray.forEach(c=>{c.gain.gain.linearRampToValueAtTime(fade*0.3, audioCtx.currentTime+0.1);});
+    }
+
+    if(timerSeconds<=0){
+      clearInterval(timerInterval);
+      stopAudio();
+      stopDrumMachine();
+    }
+
+    const min = String(Math.floor(timerSeconds/60)).padStart(2,'0');
+    const sec = String(timerSeconds%60).padStart(2,'0');
+    document.getElementById("timer").innerText = `${min}:${sec}`;
+  },1000);
+}
+
+/* ======================== MELODY ======================== */
+function updateMelody(){
+  if(!audioStarted) return;
+  const now = audioCtx.currentTime;
+
+  circleAudioArray.forEach((c,i)=>{
+    if(now>=c.nextNoteTime){
+      const freq = melody[Math.floor(Math.random()*melody.length)];
+      const color = new THREE.Color(`hsl(${Math.random()*360},100%,50%)`);
+      circles[i].targetColor.copy(color);
+      c.lastNoteColor = color;
+
+      c.osc.frequency.cancelScheduledValues(now);
+      c.osc.frequency.setValueAtTime(c.currentFreq||freq,now);
+      c.osc.frequency.exponentialRampToValueAtTime(freq,now+0.08);
+
+      const g = c.gain.gain;
+      g.cancelScheduledValues(now);
+
+      if(c.pointillistic){
+        g.setValueAtTime(0.0001,now);
+        g.linearRampToValueAtTime(0.3,now+0.02);
+        g.linearRampToValueAtTime(0.0001,now+0.08);
+        c.noteDuration = 0.05+Math.random()*0.1;
+        c.nextNoteTime = now+0.15+Math.random()*0.2;
+      } else {
+        g.setValueAtTime(0.0001,now);
+        g.linearRampToValueAtTime(0.3,now+0.05);
+        g.linearRampToValueAtTime(0.0001,now+c.noteDuration);
+        c.noteDuration = 0.15+Math.random()*0.25;
+        c.nextNoteTime = now+0.4+Math.random()*0.8;
+      }
+      c.currentFreq = freq;
+    }
+  });
+}
+
+/* ======================== SPATIAL AUDIO ======================== */
+function updateAudioSpatial(){
+  if(!audioStarted) return;
+
+  audioCtx.listener.positionX.value = camera.position.x;
+  audioCtx.listener.positionY.value = camera.position.y;
+  audioCtx.listener.positionZ.value = camera.position.z;
+
+  const forward = new THREE.Vector3(0,0,-1).applyEuler(camera.rotation);
+  audioCtx.listener.forwardX.value = forward.x;
+  audioCtx.listener.forwardY.value = forward.y;
+  audioCtx.listener.forwardZ.value = forward.z;
+
+  audioCtx.listener.upX.value = 0;
+  audioCtx.listener.upY.value = 1;
+  audioCtx.listener.upZ.value = 0;
+
+  for(let i=0;i<totalCircles;i++){
+    const src = circleAudioArray[i];
+    const pos = circles[i].mesh.position;
+
+    src.panner.positionX.value = pos.x;
+    src.panner.positionY.value = pos.y;
+    src.panner.positionZ.value = pos.z;
+
+    const dist = camera.position.distanceTo(pos);
+    const t = Math.min(dist/25,1);
+
+    const vol = Math.pow(1-t,3);
+    src.gain.gain.linearRampToValueAtTime(vol,audioCtx.currentTime+0.1);
+    src.currentVolume = vol;
+
+    const cutoff = 600 + (20000-600)*Math.pow(1-t,2.2);
+    src.lowpass.frequency.linearRampToValueAtTime(cutoff,audioCtx.currentTime+0.1);
+  }
+}
+
+/* ======================== VISUALS ======================== */
+function updateCirclesVisuals(){
+  const time = performance.now()/1000;
+
+  for(let i=0;i<totalCircles;i++){
+    const c = circles[i];
+    c.mesh.position.y = c.baseY + Math.sin(time+i)*0.3;
+    c.currentColor.lerp(c.targetColor,0.02);
+    c.mesh.material.color.copy(c.currentColor);
+    c.mesh.material.emissive.copy(c.currentColor);
+
+    const segs = circleSegments[i];
+    const freq = circleAudioArray[i]?.currentFreq||440;
+    const amp = circleAudioArray[i]?.currentVolume||0;
+
+    for(let j=0;j<segs.length;j++){
+      const seg = segs[j];
+      const len = 2*(0.5+amp)*Math.sin(freq*time+j);
+      const pos = seg.geom.attributes.position.array;
+      pos[0]=0; pos[1]=0; pos[2]=0;
+      pos[3]=0; pos[4]=len; pos[5]=0;
+      seg.geom.attributes.position.needsUpdate=true;
+      const brightness=0.5+0.5*amp;
+      seg.line.material.color.copy(c.currentColor).multiplyScalar(brightness);
+    }
+  }
+}
+
+/* ======================== MINI-MAP ======================== */
+const miniMap=document.getElementById("miniMap");
+const miniCtx=miniMap.getContext("2d");
+const dpi=window.devicePixelRatio||1;
+miniMap.width=miniMap.clientWidth*dpi;
+miniMap.height=miniMap.clientHeight*dpi;
+miniCtx.scale(dpi,dpi);
+
+let selectedCircleIndex=null, dragging=false;
+
+function miniMapToWorld(mx,my){
+  const worldX=(mx/miniMap.width)*floorSize - floorSize/2;
+  const worldZ=(my/miniMap.height)*floorSize - floorSize/2;
+  return {worldX,worldZ};
+}
+
+miniMap.addEventListener("mousedown",(e)=>{
+  const rect=miniMap.getBoundingClientRect();
+  const mx=(e.clientX-rect.left)*(miniMap.width/rect.width);
+  const my=(e.clientY-rect.top)*(miniMap.height/rect.height);
+
+  selectedCircleIndex=null; dragging=false;
+
+  for(let i=0;i<circles.length;i++){
+    const cx=(circles[i].mesh.position.x+floorSize/2)/floorSize*miniMap.width;
+    const cy=(circles[i].mesh.position.z+floorSize/2)/floorSize*miniMap.height;
+    const dx=mx-cx, dy=my-cy;
+    if(dx*dx+dy*dy<25){selectedCircleIndex=i; dragging=true; return;}
+  }
+});
+miniMap.addEventListener("mousemove",(e)=>{
+  if(!dragging||selectedCircleIndex===null) return;
+  const rect=miniMap.getBoundingClientRect();
+  const mx=(e.clientX-rect.left)*(miniMap.width/rect.width);
+  const my=(e.clientY-rect.top)*(miniMap.height/rect.height);
+  const {worldX,worldZ}=miniMapToWorld(mx,my);
+  circles[selectedCircleIndex].mesh.position.set(worldX,1,worldZ);
+});
+["mouseup","mouseleave"].forEach(ev=>miniMap.addEventListener(ev,()=>{dragging=false; selectedCircleIndex=null;}));
+
+function updateMiniMap(){
+  miniCtx.clearRect(0,0,miniMap.width,miniMap.height);
+  circles.forEach(c=>{
+    const x=(c.mesh.position.x+floorSize/2)/floorSize*miniMap.width/dpi;
+    const y=(c.mesh.position.z+floorSize/2)/floorSize*miniMap.height/dpi;
+    miniCtx.beginPath();
+    miniCtx.arc(x,y,5,0,Math.PI*2);
+    miniCtx.fillStyle=`#${c.currentColor.getHexString()}`;
+    miniCtx.fill();
+  });
+  const userX=(camera.position.x+floorSize/2)/floorSize*miniMap.width/dpi;
+  const userY=(camera.position.z+floorSize/2)/floorSize*miniMap.height/dpi;
+  miniCtx.beginPath();
+  miniCtx.arc(userX,userY,5,0,Math.PI*2);
+  miniCtx.fillStyle="red";
+  miniCtx.fill();
+}
+
+/* ======================== DRUM MACHINE ======================== */
+let drumInterval=null;
+function startDrumMachine(){ drumInterval=setInterval(()=>{ circles.forEach(c=>c.targetColor.setHSL(Math.random(),1,0.5)); },300); }
+function stopDrumMachine(){ if(drumInterval) clearInterval(drumInterval); }
+
+/* ======================== STOP AUDIO ======================== */
+function stopAudio(){
+  if(!audioStarted) return;
+  const now=audioCtx.currentTime;
+  circleAudioArray.forEach(c=>{
+    c.gain.gain.linearRampToValueAtTime(0, now+0.05);
+    c.osc.stop(now+0.05);
+  });
+}
+
+/* ======================== ANIMATION LOOP ======================== */
+function animate(){
+  requestAnimationFrame(animate);
+  updateMovement();
+  updateMelody();
+  updateAudioSpatial();
+  updateCirclesVisuals();
+  updateMiniMap();
+  renderer.render(scene,camera);
+}
+
+document.getElementById("startAudio").addEventListener("click",startAudio);
+animate();
+
+/* ======================== RESIZE ======================== */
+window.addEventListener("resize",()=>{
+  camera.aspect=window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth,window.innerHeight);
+});
+</script>
+</body>
+</html>
